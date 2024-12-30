@@ -1,151 +1,138 @@
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trainer, TrainingArguments
-from datasets import load_dataset
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
-from huggingface_hub import HfApi, HfFolder
-import pandas as pd
-import numpy as np
-from datetime import datetime
+import torch
+from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
+from sklearn.model_selection import train_test_split
+from datasets import Dataset
+import pytorch_lightning as pl
+from sklearn.metrics import classification_report
 
-# Sử dụng mô hình PhoBERT cho tiếng Việt
-MODEL_NAME = "vinai/phobert-base"
+# Thêm các import còn thiếu
+from PIL import Image
+import pytesseract
+import speech_recognition as sr
 
-# Tải dữ liệu từ tệp CSV
-dataset = load_dataset('csv', data_files={
-    'train': 'train.csv', 
-    'validation': 'valid.csv'
-}, delimiter=';')  # Thêm delimiter để xử lý đúng định dạng CSV
+class StudentPsychologyModel:
+    def __init__(self, model_name='bert-base-uncased', num_labels=3):
+        # Tải mô hình BERT đã được huấn luyện trước và bộ tokenizer
+        self.tokenizer = BertTokenizer.from_pretrained(model_name)
+        self.model = BertForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
 
-# Tokenizer và model phù hợp với tiếng Việt
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModelForSequenceClassification.from_pretrained(
-    MODEL_NAME,
-    num_labels=len(set(dataset['train']['label']))  # Số nhãn dựa trên dữ liệu thực tế
-)
-
-# Hàm xử lý dữ liệu
-def preprocess_function(examples):
-    # Xử lý text tiếng Việt
-    return tokenizer(
-        examples['text'],
-        padding='max_length',
-        truncation=True,
-        max_length=256  # Tăng độ dài tối đa cho văn bản tiếng Việt
-    )
-
-# Xử lý dữ liệu
-tokenized_datasets = dataset.map(preprocess_function, batched=True)
-
-# Thêm trường timestamp để theo dõi thời gian
-def add_timestamp(example):
-    example['timestamp'] = datetime.now().isoformat()
-    return example
-
-tokenized_datasets = tokenized_datasets.map(add_timestamp)
-
-# Thiết lập tham số huấn luyện
-training_args = TrainingArguments(
-    output_dir='./model_results',
-    evaluation_strategy='epoch',
-    learning_rate=2e-5,
-    per_device_train_batch_size=8,
-    per_device_eval_batch_size=8,
-    num_train_epochs=5,  # Tăng số epoch để học tốt hơn
-    weight_decay=0.01,
-    logging_dir='./logs',
-    logging_steps=10,
-    load_best_model_at_end=True,  # Lưu mô hình tốt nhất
-    metric_for_best_model='f1',  # Sử dụng F1 làm metric chính
-    remove_unused_columns=False
-)
-
-# Định nghĩa hàm tính metric
-def compute_metrics(pred):
-    labels = pred.label_ids
-    preds = pred.predictions.argmax(-1)
-    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='weighted')
-    acc = accuracy_score(labels, preds)
-    return {
-        'accuracy': acc,
-        'f1': f1,
-        'precision': precision,
-        'recall': recall
-    }
-
-# Thiết lập Trainer với compute_metrics
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=tokenized_datasets['train'],
-    eval_dataset=tokenized_datasets['validation'],
-    compute_metrics=compute_metrics
-)
-
-# Class để lưu trữ và phân tích lịch sử
-class StudentHistoryAnalyzer:
-    def __init__(self):
-        self.history = {}
-    
-    def add_observation(self, student_id, observation, prediction):
-        if student_id not in self.history:
-            self.history[student_id] = []
-        self.history[student_id].append({
-            'timestamp': datetime.now(),
-            'observation': observation,
-            'prediction': prediction
+    def preprocess_data(self, texts, labels, max_length=512):
+        # Tiền xử lý dữ liệu văn bản và chuẩn bị nhãn cho mô hình BERT
+        encodings = self.tokenizer(texts, truncation=True, padding=True, max_length=max_length)
+        return Dataset.from_dict({
+            'input_ids': encodings['input_ids'],
+            'attention_mask': encodings['attention_mask'],
+            'labels': labels
         })
-    
-    def analyze_progress(self, student_id):
-        if student_id not in self.history:
-            return "Chưa có dữ liệu về học sinh này"
-        
-        observations = self.history[student_id]
-        if len(observations) < 2:
-            return "Cần thêm dữ liệu để phân tích xu hướng"
-            
-        # Phân tích xu hướng và đưa ra đề xuất
-        recent_issues = [obs['prediction'] for obs in observations[-3:]]
-        return self._generate_recommendations(recent_issues)
-    
-    def _generate_recommendations(self, recent_issues):
-        # Logic đưa ra đề xuất dựa trên lịch sử quan sát
-        # Có thể mở rộng phần này với các quy tắc phức tạp hơn
+
+    def train_model(self, train_texts, train_labels, val_texts, val_labels, output_dir='./final_model'):
+        # Tiền xử lý dữ liệu huấn luyện và kiểm tra
+        train_data = self.preprocess_data(train_texts, train_labels)
+        val_data = self.preprocess_data(val_texts, val_labels)
+
+        # Định nghĩa các tham số huấn luyện
+        training_args = TrainingArguments(
+            output_dir=output_dir,  # Đường dẫn để lưu mô hình
+            evaluation_strategy="epoch",  # Đánh giá mô hình sau mỗi epoch
+            learning_rate=2e-5,  # Tốc độ học
+            per_device_train_batch_size=16,  # Kích thước batch khi huấn luyện
+            per_device_eval_batch_size=16,  # Kích thước batch khi kiểm tra
+            num_train_epochs=3,  # Số epoch huấn luyện
+            weight_decay=0.01,  # Giảm trọng số (weight decay)
+            save_steps=10_000,  # Số bước huấn luyện để lưu mô hình
+            save_total_limit=2,  # Giới hạn số lượng mô hình được lưu
+            logging_dir='./logs',  # Đường dẫn lưu log
+            logging_steps=500,  # Số bước để ghi log
+            load_best_model_at_end=True,  # Tải mô hình tốt nhất khi huấn luyện kết thúc
+            metric_for_best_model="accuracy"  # Đánh giá mô hình tốt nhất dựa trên độ chính xác
+        )
+
+        # Khởi tạo Trainer để huấn luyện mô hình
+        trainer = Trainer(
+            model=self.model,
+            args=training_args,
+            train_dataset=train_data,
+            eval_dataset=val_data,
+            compute_metrics=self.compute_metrics  # Hàm tính toán các chỉ số đánh giá
+        )
+
+        # Huấn luyện mô hình
+        trainer.train()
+
+        # Lưu mô hình và tokenizer đã huấn luyện
+        self.model.save_pretrained(output_dir)
+        self.tokenizer.save_pretrained(output_dir)
+
+    def compute_metrics(self, p):
+        # Tính toán độ chính xác và các chỉ số đánh giá khác
+        preds = p.predictions.argmax(axis=1)
+        labels = p.label_ids
+        report = classification_report(labels, preds, output_dict=True)
+        accuracy = report['accuracy']
+        return {'accuracy': accuracy}
+
+    def predict(self, text):
+        # Tiền xử lý văn bản và thực hiện dự đoán với mô hình đã huấn luyện
+        inputs = self.tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+            logits = outputs.logits
+            predicted_class = torch.argmax(logits, dim=1).item()  # Lấy lớp phân loại có xác suất cao nhất
+        return predicted_class
+
+    def _generate_recommendations(self, prediction, last_text):
+        # Tạo ra các gợi ý dựa trên dự đoán và văn bản nhập vào
         recommendations = []
-        if len(set(recent_issues)) == 1:
-            recommendations.append("Vấn đề vẫn đang tiếp diễn, cần tăng cường biện pháp can thiệp")
-        elif len(recent_issues) >= 3 and recent_issues[-1] != recent_issues[0]:
-            recommendations.append("Có sự thay đổi trong hành vi, cần điều chỉnh phương pháp phù hợp")
+        
+        if prediction == 0:
+            recommendations.append("Học sinh bình thường, cần khuyến khích động viên.")
+        elif prediction == 1:
+            recommendations.append("Học sinh có dấu hiệu căng thẳng. Nên trao đổi trực tiếp và tạo không gian để chia sẻ.")
+        elif prediction == 2:
+            recommendations.append("Học sinh thất vọng, cần đề xuất hỗ trợ tâm lý chuyên sâu hoặc kết nối với chuyên gia.")
+        
+        # Gợi ý dựa trên các từ khóa trong văn bản nhập vào
+        if "khóc" in last_text:
+            recommendations.append("Học sinh có dấu hiệu cảm xúc tiêu cực. Nên hỏi thăm và động viên.")
+        elif "ngủ" in last_text:
+            recommendations.append("Học sinh có dấu hiệu mệt mỏi. Hỏi về lịch sinh hoạt và tình trạng sức khỏe.")
+        
         return "\n".join(recommendations)
 
-# Huấn luyện mô hình
-trainer.train()
+    def extract_text_from_image(self, image_path):
+        # Quét văn bản từ hình ảnh bằng OCR
+        text = pytesseract.image_to_string(Image.open(image_path), lang='vie')
+        return text
 
-# Lưu mô hình
-model_path = './final_model'
-trainer.save_model(model_path)
-tokenizer.save_pretrained(model_path)
+    def transcribe_speech(self):
+        # Nhận diện giọng nói và chuyển thành văn bản
+        recognizer = sr.Recognizer()
+        with sr.Microphone() as source:
+            audio = recognizer.listen(source)
+        try:
+            text = recognizer.recognize_google(audio, language="vi-VN")
+            return text
+        except sr.UnknownValueError:
+            return ""
+        except sr.RequestError as e:
+            return ""
 
-# Đăng tải lên Hugging Face Hub
-api = HfApi()
-api.upload_folder(
-    folder_path=model_path,
-    repo_id="tchun3879/AI-theo-doi-tam-ly-hoc-sinh",  # Cập nhật repo_id
-    repo_type="model"
-)
+# Ví dụ huấn luyện và đánh giá mô hình
+if __name__ == "__main__":
+    # Dữ liệu ví dụ (texts và labels cần được cung cấp)
+    texts = ["Học sinh có dấu hiệu căng thẳng", "Học sinh hoạt động bình thường"]
+    labels = [1, 0]  # 0: bình thường, 1: căng thẳng, 2: thất vọng
 
-# Hàm dự đoán với phân tích lịch sử
-def predict_and_track(text, student_id, analyzer):
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=256)
-    outputs = model(**inputs)
-    prediction = outputs.logits.argmax(-1).item()
-    
-    # Thêm vào lịch sử
-    analyzer.add_observation(student_id, text, prediction)
-    
-    # Lấy phân tích xu hướng
-    trend_analysis = analyzer.analyze_progress(student_id)
-    
-    return {
-        'current_prediction': prediction,
-        'trend_analysis': trend_analysis
-    }
+    # Chia dữ liệu thành tập huấn luyện và kiểm tra
+    train_texts, val_texts, train_labels, val_labels = train_test_split(texts, labels, test_size=0.2)
 
+    # Khởi tạo và huấn luyện mô hình
+    model = StudentPsychologyModel()
+    model.train_model(train_texts, train_labels, val_texts, val_labels)
+
+    # Dự đoán và tạo gợi ý
+    sample_text = "Học sinh có dấu hiệu căng thẳng"
+    prediction = model.predict(sample_text)
+    recommendations = model._generate_recommendations(prediction, sample_text)
+    print(f"Dự đoán: {prediction}")
+    print(f"Gợi ý: {recommendations}")
