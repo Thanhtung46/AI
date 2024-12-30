@@ -128,7 +128,7 @@ tokenizer.save_pretrained(model_path)
 api = HfApi()
 api.upload_folder(
     folder_path=model_path,
-    repo_id="tchun3879/student-psychology-vietnam",  # Cập nhật repo_id
+    repo_id="tchun3879/AI-theo-doi-tam-ly-hoc-sinh",  # Cập nhật repo_id
     repo_type="model"
 )
 
