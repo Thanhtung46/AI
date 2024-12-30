@@ -1,0 +1,9 @@
+transformers
+torch
+pillow
+pytesseract
+SpeechRecognition
+pyaudio
+scikit-learn
+datasets
+pytorch-lightning
