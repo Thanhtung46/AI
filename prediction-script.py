@@ -1,11 +1,37 @@
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 
+class StudentHistoryAnalyzer:
+    def __init__(self):
+        self.history = {}
+
+    def add_observation(self, student_id, text, prediction):
+        if student_id not in self.history:
+            self.history[student_id] = []
+        self.history[student_id].append((text, prediction))
+
+    def analyze_progress(self, student_id):
+        if student_id not in self.history or len(self.history[student_id]) < 2:
+            return "Chưa đủ dữ liệu để phân tích."
+
+        recent_predictions = [pred for _, pred in self.history[student_id][-5:]]
+        trend = "Không có thay đổi"
+        
+        if all(p == 0 for p in recent_predictions):
+            trend = "Học sinh ổn định, có vẻ bình thường."
+        elif all(p == 1 for p in recent_predictions):
+            trend = "Học sinh đang gặp căng thẳng."
+        elif all(p == 2 for p in recent_predictions):
+            trend = "Học sinh có dấu hiệu thất vọng, cần hỗ trợ thêm."
+        else:
+            trend = "Có sự thay đổi trong trạng thái tâm lý học sinh."
+        return trend
+
 class PsychologyPredictor:
     def __init__(self, model_path):
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         self.model = AutoModelForSequenceClassification.from_pretrained(model_path)
-        self.analyzer = StudentHistoryAnalyzer()
+        self.analyzer = StudentHistoryAnalyzer()  # Đảm bảo lớp được khởi tạo ở đây
 
     def predict(self, text, student_id):
         # Chuẩn bị input
