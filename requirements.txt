@@ -7,3 +7,4 @@ pyaudio
 scikit-learn
 datasets
 pytorch-lightning
+gradio
