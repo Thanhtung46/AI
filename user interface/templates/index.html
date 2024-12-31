@@ -1,32 +1,31 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ứng dụng Dự đoán Mô hình</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Student Psychology Prediction</title>
+    <link rel="stylesheet" href="./static/style.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
-    <h1>Dự đoán với Mô hình Huấn luyện</h1>
-    
-    <form id="predictForm">
-        <label for="feature1">Feature 1:</label>
-        <input type="text" id="feature1" name="feature1" required><br><br>
-        
-        <label for="feature2">Feature 2:</label>
-        <input type="text" id="feature2" name="feature2" required><br><br>
-        
-        <label for="feature3">Feature 3:</label>
-        <input type="text" id="feature3" name="feature3" required><br><br>
-        
-        <label for="feature4">Feature 4:</label>
-        <input type="text" id="feature4" name="feature4" required><br><br>
-        
-        <button type="submit">Dự đoán</button>
-    </form>
-    
-    <h3 id="predictionResult"></h3>
-    
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <div class="container">
+        <h2>Phân tích trạng thái tâm lý học sinh</h2>
+        <form id="predict-form">
+            <label for="student-id">Mã học sinh:</label>
+            <input type="text" id="student-id" name="student-id" required><br><br>
+
+            <label for="text">Tình trạng học sinh:</label>
+            <textarea id="text" name="text" required></textarea><br><br>
+
+            <button type="submit">Dự đoán</button>
+        </form>
+
+        <div class="result" style="display:none;">
+            <p id="prediction"></p>
+            <p id="trend-analysis"></p>
+        </div>
+    </div>
+
+    <script src="./static/script.js"></script>
 </body>
 </html>

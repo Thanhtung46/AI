@@ -1,5 +1,6 @@
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
+from transformers import BertTokenizer, BertForSequenceClassification
+import json
 
 class StudentHistoryAnalyzer:
     def __init__(self):
@@ -29,13 +30,14 @@ class StudentHistoryAnalyzer:
 
 class PsychologyPredictor:
     def __init__(self, model_path):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_path)
+        # Tải BertTokenizer và BertForSequenceClassification
+        self.tokenizer = BertTokenizer.from_pretrained(model_path)
+        self.model = BertForSequenceClassification.from_pretrained(model_path)
         self.analyzer = StudentHistoryAnalyzer()  # Đảm bảo lớp được khởi tạo ở đây
 
     def predict(self, text, student_id):
         # Chuẩn bị input
-        inputs = self.tokenizer(text, return_tensors="pt", truncation=True, padding=True)
+        inputs = self.tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=128)
         
         # Dự đoán
         with torch.no_grad():
@@ -53,6 +55,19 @@ class PsychologyPredictor:
             'trend_analysis': trend_analysis
         }
 
+    def save_history(self, filename):
+        # Lưu lịch sử học sinh vào tệp JSON
+        with open(filename, 'w') as f:
+            json.dump(self.analyzer.history, f)
+
+    def load_history(self, filename):
+        # Tải lịch sử học sinh từ tệp JSON
+        try:
+            with open(filename, 'r') as f:
+                self.analyzer.history = json.load(f)
+        except FileNotFoundError:
+            print(f"Không tìm thấy tệp lịch sử: {filename}")
+
 # Sử dụng mô hình
 predictor = PsychologyPredictor('./final_model')
 
@@ -62,3 +77,9 @@ student_id = "HS001"
 result = predictor.predict(text, student_id)
 print(f"Kết quả dự đoán: {result['prediction']}")
 print(f"Phân tích xu hướng: {result['trend_analysis']}")
+
+# Lưu lịch sử
+predictor.save_history('student_history.json')
+
+# Tải lịch sử
+predictor.load_history('student_history.json')

@@ -1,30 +1,42 @@
-document.getElementById('predictForm').addEventListener('submit', function(event) {
-    event.preventDefault();  // Ngừng việc gửi form mặc định
-    
-    // Lấy dữ liệu từ form
-    const formData = new FormData(event.target);
-    
-    // Chuyển đổi formData thành một đối tượng có thể sử dụng được trong JSON
-    const data = {};
-    formData.forEach((value, key) => {
-        data[key] = value;
+$(document).ready(function() {
+    // Khi form được gửi
+    $('#predict-form').on('submit', function(event) {
+        event.preventDefault(); // Ngừng gửi form mặc định
+
+        // Lấy giá trị từ các trường đầu vào
+        const studentId = $('#student-id').val();
+        const text = $('#text').val();
+
+        // Gửi dữ liệu tới Flask API
+        $.ajax({
+            url: '/predict',  // Địa chỉ API Flask
+            method: 'POST',
+            data: {
+                'student-id': studentId,  // ID của học sinh
+                'text': text               // Tình trạng học sinh
+            },
+            success: function(response) {
+                if (response.prediction !== undefined) {
+                    // Hiển thị kết quả dự đoán
+                    $('#prediction').text('Dự đoán: ' + (response.prediction === 0 ? 'Ổn định' : (response.prediction === 1 ? 'Căng thẳng' : 'Thất vọng')));
+                    $('#trend-analysis').text('Phân tích xu hướng: ' + response.trend_analysis);
+                    $('.result').show();  // Hiển thị phần kết quả
+                } else if (response.error) {
+                    alert('Lỗi: ' + response.error);  // Nếu có lỗi
+                }
+            },
+            error: function(xhr, status, error) {
+                alert('Đã có lỗi xảy ra: ' + error);  // Nếu có lỗi trong yêu cầu
+            }
+        });
     });
-    
-    // Gửi yêu cầu POST đến Flask để nhận dự đoán
-    fetch('/predict', {
-        method: 'POST',
-        body: new URLSearchParams(data)
-    })
-    .then(response => response.json())
-    .then(result => {
-        // Hiển thị kết quả dự đoán
-        if (result.prediction !== undefined) {
-            document.getElementById('predictionResult').innerText = `Dự đoán: ${result.prediction}`;
-        } else if (result.error) {
-            document.getElementById('predictionResult').innerText = `Lỗi: ${result.error}`;
-        }
-    })
-    .catch(error => {
-        console.error('Có lỗi xảy ra:', error);
+
+    // Xóa kết quả cũ khi người dùng thay đổi thông tin
+    $('#student-id').on('input', function() {
+        $('.result').hide(); // Ẩn kết quả khi người dùng thay đổi mã học sinh
+    });
+
+    $('#text').on('input', function() {
+        $('.result').hide(); // Ẩn kết quả khi người dùng thay đổi tình trạng
     });
 });
