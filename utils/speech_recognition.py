@@ -17,3 +17,4 @@ def transcribe_speech(lang='vi-VN'):
             return "Không nhận diện được giọng nói."
         except sr.RequestError as e:
             return f"Lỗi khi kết nối dịch vụ: {e}"
+

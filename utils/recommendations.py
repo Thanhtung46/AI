@@ -23,3 +23,4 @@ def generate_dynamic_recommendations(prediction, text):
         final_recommendation += " " + " ".join(additional_recommendations)
 
     return final_recommendation
+

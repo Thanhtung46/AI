@@ -13,3 +13,5 @@ def extract_text_from_image(image_path, lang='vie'):
         return text.strip()
     except Exception as e:
         return f"Lỗi khi xử lý ảnh: {e}"
+
+
