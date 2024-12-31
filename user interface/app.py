@@ -1,30 +1,35 @@
-import tkinter as tk
-from tkinter import messagebox
+import pickle
+from flask import Flask, render_template, request, jsonify
+import numpy as np
 
-# Hàm xử lý khi nhấn nút
-def on_button_click():
-    user_input = entry.get()  # Lấy giá trị người dùng nhập vào ô entry
-    if user_input:
-        messagebox.showinfo("Thông báo", f"Chào bạn, {user_input}!")
-    else:
-        messagebox.showwarning("Cảnh báo", "Vui lòng nhập tên của bạn!")
+# Khởi tạo Flask app
+app = Flask(__name__)
 
-# Khởi tạo cửa sổ chính
-root = tk.Tk()
-root.title("Giao diện Người Dùng Đơn Giản")
-root.geometry("400x200")  # Kích thước cửa sổ (rộng x cao)
+# Tải mô hình đã huấn luyện
+with open('final_model', 'rb') as f:
+    model = pickle.load(f)
 
-# Thêm nhãn (Label)
-label = tk.Label(root, text="Nhập tên của bạn:")
-label.pack(pady=10)  # `pady` là khoảng cách dọc
+# Route trang chủ
+@app.route('/')
+def home():
+    return render_template('index.html')
 
-# Thêm ô nhập liệu (Entry)
-entry = tk.Entry(root, width=30)
-entry.pack(pady=5)
+# Route nhận dữ liệu từ người dùng và dự đoán kết quả
+@app.route('/predict', methods=['POST'])
+def predict():
+    try:
+        # Lấy dữ liệu từ người dùng (ví dụ, 4 tham số cho Iris dataset)
+        data = request.form.to_dict()
+        features = np.array([list(map(float, data.values()))]).reshape(1, -1)
 
-# Thêm nút (Button)
-button = tk.Button(root, text="Gửi", command=on_button_click)
-button.pack(pady=20)
+        # Dự đoán với mô hình đã huấn luyện
+        prediction = model.predict(features)
+        
+        # Trả về kết quả dưới dạng JSON
+        return jsonify({'prediction': int(prediction[0])})
+    
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
-# Chạy vòng lặp chính của cửa sổ GUI
-root.mainloop()
+if __name__ == '__main__':
+    app.run(debug=True)
